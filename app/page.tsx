@@ -4,7 +4,15 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 function formatEUR(cents: number) {
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" }).format(cents / 100);
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "EUR",
+  }).format(cents / 100);
+}
+
+function toNumber(x: any) {
+  const n = typeof x === "string" ? Number(x) : x;
+  return Number.isFinite(n) ? n : null;
 }
 
 export default async function Home() {
@@ -24,10 +32,27 @@ export default async function Home() {
     }
   );
 
-  // ✅ Fetch published events
+  // ✅ Fetch published events + ticket types (full enough for pricing)
   const { data: events, error } = await supabase
     .from("events")
-    .select("id,title,slug,venue,address,start_at,status,ticket_types(price_cents)")
+    .select(
+      `
+        id,
+        title,
+        slug,
+        venue,
+        address,
+        start_at,
+        status,
+        ticket_types (
+          id,
+          name,
+          price_cents,
+          currency,
+          capacity
+        )
+      `
+    )
     .eq("status", "published")
     .order("start_at", { ascending: true });
 
@@ -65,7 +90,9 @@ export default async function Home() {
             gap: 14,
           }}
         >
-          <div style={{ fontSize: 14, letterSpacing: 1, opacity: 0.85 }}>STELLA EVENTS</div>
+          <div style={{ fontSize: 14, letterSpacing: 1, opacity: 0.85 }}>
+            STELLA EVENTS
+          </div>
 
           <h1 style={{ fontSize: 42, fontWeight: 950, lineHeight: 1.1, margin: 0 }}>
             Movie Show in Brescia
@@ -127,7 +154,9 @@ export default async function Home() {
             </a>
           </div>
 
-          <div style={{ marginTop: 10, opacity: 0.85, fontSize: 13 }}>Presale €12 • At Gate €15</div>
+          <div style={{ marginTop: 10, opacity: 0.85, fontSize: 13 }}>
+            Presale €12 • At Gate €15
+          </div>
 
           {error ? (
             <div style={{ marginTop: 10, color: "#ff6b6b", fontSize: 13 }}>
@@ -149,9 +178,11 @@ export default async function Home() {
           }}
         >
           {events?.map((e: any) => {
-            const prices = (e.ticket_types ?? [])
-              .map((t: any) => t.price_cents)
-              .filter((x: any) => typeof x === "number");
+            const prices =
+              (e.ticket_types ?? [])
+                .map((t: any) => toNumber(t.price_cents))
+                .filter((n: any) => typeof n === "number" && n > 0) || [];
+
             const minPrice = prices.length ? Math.min(...prices) : null;
 
             return (
@@ -172,9 +203,15 @@ export default async function Home() {
                 <div style={{ opacity: 0.8, marginTop: 6 }}>
                   {new Date(e.start_at).toLocaleString("en-GB")}
                 </div>
+
                 <div style={{ marginTop: 10, fontWeight: 900 }}>
                   {minPrice !== null ? `From ${formatEUR(minPrice)}` : "Price TBD"}
                 </div>
+
+                {/* Optional debug (remove later) */}
+                {/* <div style={{ marginTop: 8, opacity: 0.6, fontSize: 12 }}>
+                  ticket_types: {(e.ticket_types?.length ?? 0).toString()}
+                </div> */}
               </Link>
             );
           })}
@@ -197,7 +234,7 @@ export default async function Home() {
               <b>Dulanji:</b> +39 324 568 9483
             </div>
             <div>
-              <b>Rithmi:</b> +39 324 601 7453
+              
             </div>
           </div>
         </div>
