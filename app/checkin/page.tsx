@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import Scanner from "./Scanner";
 
 type CheckinResponse = {
   ok?: boolean;
@@ -9,6 +10,8 @@ type CheckinResponse = {
   event?: { title?: string; venue?: string; start_at?: string } | null;
   ticketType?: { name?: string } | null;
   error?: string;
+  message?: string;
+  details?: any;
 };
 
 type Analytics = {
@@ -25,24 +28,30 @@ export default function CheckinPage() {
   const [loading, setLoading] = useState(false);
   const [res, setRes] = useState<CheckinResponse | null>(null);
 
-  // QR scanner
+  // Scanner
   const [scannerOn, setScannerOn] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
 
   // analytics (optional)
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
-  const [eventId, setEventId] = useState(""); // you can paste event id here
+  const [eventId, setEventId] = useState("");
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const statusLabel = useMemo(() => {
     if (!res) return null;
-    if (res.error) return { text: res.error, type: "bad" as const };
+
+    const msg =
+      res.message ||
+      (typeof res.details === "string" ? res.details : null) ||
+      res.error;
+
     if (res.ok) return { text: "✅ Check-in successful", type: "good" as const };
+
     if (res.reason === "ALREADY_USED") return { text: "⚠️ Already used", type: "warn" as const };
-    if (res.reason === "INVALID_TICKET") return { text: "❌ Invalid ticket", type: "bad" as const };
-    if (res.reason === "NOT_ACTIVE") return { text: "❌ Ticket not active", type: "bad" as const };
-    if (res.reason === "UNAUTHORIZED") return { text: "🔒 Wrong PIN", type: "bad" as const };
-    return { text: "❌ Check-in failed", type: "bad" as const };
+    if (res.reason === "INVALID_TICKET") return { text: msg || "❌ Invalid ticket", type: "bad" as const };
+    if (res.reason === "NOT_ACTIVE") return { text: msg || "❌ Ticket not active", type: "bad" as const };
+    if (res.reason === "UNAUTHORIZED") return { text: msg || "🔒 Wrong PIN", type: "bad" as const };
+
+    return { text: msg || "❌ Check-in failed", type: "bad" as const };
   }, [res]);
 
   async function doCheckin(scannedToken?: string) {
@@ -51,18 +60,20 @@ export default function CheckinPage() {
 
     setLoading(true);
     setRes(null);
+
     try {
       const r = await fetch("/api/checkin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: useToken, pin: pin || undefined }),
       });
+
       const data = await r.json();
       setRes(data);
-      // auto refresh analytics after scan
+
       if (eventId) refreshAnalytics(eventId);
     } catch (e: any) {
-      setRes({ error: e.message || "Network error" });
+      setRes({ error: e?.message || "Network error" });
     } finally {
       setLoading(false);
     }
@@ -71,89 +82,19 @@ export default function CheckinPage() {
   async function refreshAnalytics(eid: string) {
     setAnalyticsLoading(true);
     try {
-      const r = await fetch(`/api/checkin/stats?eventId=${encodeURIComponent(eid)}`, {
-        method: "GET",
-      });
+      const r = await fetch(`/api/checkin/stats?eventId=${encodeURIComponent(eid)}`);
       const data = await r.json();
       setAnalytics(data);
-    } catch (e: any) {
+    } catch {
       setAnalytics(null);
     } finally {
       setAnalyticsLoading(false);
     }
   }
 
-  // Camera scanner (BarcodeDetector)
-  useEffect(() => {
-    if (!scannerOn) return;
-
-    let stream: MediaStream | null = null;
-    let raf = 0;
-    let stopped = false;
-
-    async function start() {
-      setScanError(null);
-
-      if (!("mediaDevices" in navigator) || !navigator.mediaDevices.getUserMedia) {
-        setScanError("Camera not supported in this browser.");
-        return;
-      }
-
-      // BarcodeDetector is supported in Chrome/Android, some others
-      // If not supported, we’ll show a fallback message.
-      const BD = (window as any).BarcodeDetector;
-      if (!BD) {
-        setScanError("Barcode scanner not supported here. Use paste token method.");
-        return;
-      }
-
-      const detector = new BD({ formats: ["qr_code"] });
-
-      const video = document.getElementById("qr-video") as HTMLVideoElement | null;
-      if (!video) return;
-
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false,
-      });
-
-      video.srcObject = stream;
-      await video.play();
-
-      const scan = async () => {
-        if (stopped) return;
-        try {
-          const barcodes = await detector.detect(video);
-          if (barcodes?.length) {
-            const value = barcodes[0]?.rawValue;
-            if (value) {
-              setToken(value);
-              setScannerOn(false);
-              await doCheckin(value);
-              return;
-            }
-          }
-        } catch {
-          // ignore frame errors
-        }
-        raf = requestAnimationFrame(scan);
-      };
-
-      raf = requestAnimationFrame(scan);
-    }
-
-    start().catch((e) => setScanError(e.message || "Scanner error"));
-
-    return () => {
-      stopped = true;
-      if (raf) cancelAnimationFrame(raf);
-      if (stream) stream.getTracks().forEach((t) => t.stop());
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scannerOn]);
-
   return (
     <main style={wrap}>
+      {/* Main check-in card */}
       <div style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
           <div>
@@ -173,6 +114,7 @@ export default function CheckinPage() {
             onChange={(e) => setPin(e.target.value)}
             placeholder="Enter PIN"
             style={input}
+            inputMode="numeric"
           />
         </div>
 
@@ -184,16 +126,19 @@ export default function CheckinPage() {
             onChange={(e) => setToken(e.target.value)}
             placeholder="Paste token from QR / email"
             style={input}
+            autoCapitalize="none"
+            autoCorrect="off"
           />
         </div>
 
+        {/* Actions */}
         <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-          <button onClick={() => doCheckin()} disabled={loading} style={btnPrimary}>
+          <button onClick={() => doCheckin()} disabled={loading} style={btnPrimary} type="button">
             {loading ? "Checking..." : "Check In"}
           </button>
 
-          <button onClick={() => setScannerOn((v) => !v)} style={btnSecondary} type="button">
-            {scannerOn ? "Stop Scanner" : "Scan QR"}
+          <button onClick={() => setScannerOn(true)} style={btnSecondary} type="button" disabled={loading}>
+            Scan QR
           </button>
 
           <button
@@ -208,31 +153,58 @@ export default function CheckinPage() {
           </button>
         </div>
 
-        {/* Scanner UI */}
+        {/* Scanner */}
         {scannerOn ? (
           <div style={{ marginTop: 14 }}>
             <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 8 }}>
               Point the camera at the QR code
             </div>
-            <div style={videoWrap}>
-              <video id="qr-video" style={video} playsInline muted />
-              <div style={scanBox} />
-            </div>
-            {scanError ? <div style={{ marginTop: 10, color: "#ff6b6b" }}>{scanError}</div> : null}
+
+            <Scanner
+              onToken={async (t) => {
+                setToken(t);
+                setScannerOn(false);
+                await doCheckin(t);
+              }}
+              onClose={() => setScannerOn(false)}
+            />
+
+            <button onClick={() => setScannerOn(false)} style={{ ...btnGhost, marginTop: 10 }} type="button">
+              Close Scanner
+            </button>
           </div>
         ) : null}
 
         {/* Result */}
         {statusLabel ? (
-          <div style={{ ...resultBox, ...(statusLabel.type === "good" ? good : statusLabel.type === "warn" ? warn : bad) }}>
+          <div
+            style={{
+              ...resultBox,
+              ...(statusLabel.type === "good" ? good : statusLabel.type === "warn" ? warn : bad),
+            }}
+          >
             <div style={{ fontWeight: 950 }}>{statusLabel.text}</div>
 
             {res?.event?.title ? (
               <div style={{ marginTop: 8, opacity: 0.9 }}>
-                <div><b>Event:</b> {res.event.title}</div>
-                {res.ticketType?.name ? <div><b>Ticket:</b> {res.ticketType.name}</div> : null}
-                {res.event?.venue ? <div><b>Venue:</b> {res.event.venue}</div> : null}
-                {res.event?.start_at ? <div><b>Time:</b> {new Date(res.event.start_at).toLocaleString("en-GB")}</div> : null}
+                <div>
+                  <b>Event:</b> {res.event.title}
+                </div>
+                {res.ticketType?.name ? (
+                  <div>
+                    <b>Ticket:</b> {res.ticketType.name}
+                  </div>
+                ) : null}
+                {res.event?.venue ? (
+                  <div>
+                    <b>Venue:</b> {res.event.venue}
+                  </div>
+                ) : null}
+                {res.event?.start_at ? (
+                  <div>
+                    <b>Time:</b> {new Date(res.event.start_at).toLocaleString("en-GB")}
+                  </div>
+                ) : null}
                 {res.checked_in_at ? (
                   <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
                     <b>Checked in at:</b> {new Date(res.checked_in_at).toLocaleString("en-GB")}
@@ -253,7 +225,14 @@ export default function CheckinPage() {
 
         <div style={{ marginTop: 10 }}>
           <label style={label}>Event ID</label>
-          <input value={eventId} onChange={(e) => setEventId(e.target.value)} placeholder="UUID..." style={input} />
+          <input
+            value={eventId}
+            onChange={(e) => setEventId(e.target.value)}
+            placeholder="UUID..."
+            style={input}
+            autoCapitalize="none"
+            autoCorrect="off"
+          />
         </div>
 
         <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
@@ -261,6 +240,7 @@ export default function CheckinPage() {
             onClick={() => eventId && refreshAnalytics(eventId)}
             disabled={!eventId || analyticsLoading}
             style={btnSecondary}
+            type="button"
           >
             {analyticsLoading ? "Loading..." : "Refresh"}
           </button>
@@ -273,9 +253,7 @@ export default function CheckinPage() {
             <Stat label="Left" value={analytics.left ?? "∞"} />
           </div>
         ) : (
-          <div style={{ marginTop: 14, opacity: 0.7, fontSize: 13 }}>
-            No stats loaded yet.
-          </div>
+          <div style={{ marginTop: 14, opacity: 0.7, fontSize: 13 }}>No stats loaded yet.</div>
         )}
       </div>
 
@@ -373,32 +351,6 @@ const resultBox: React.CSSProperties = {
 const good: React.CSSProperties = { background: "rgba(34,197,94,0.12)", borderColor: "rgba(34,197,94,0.35)" };
 const warn: React.CSSProperties = { background: "rgba(245,158,11,0.12)", borderColor: "rgba(245,158,11,0.35)" };
 const bad: React.CSSProperties = { background: "rgba(239,68,68,0.12)", borderColor: "rgba(239,68,68,0.35)" };
-
-const videoWrap: React.CSSProperties = {
-  position: "relative",
-  borderRadius: 16,
-  overflow: "hidden",
-  border: "1px solid #23232b",
-  background: "#000",
-  aspectRatio: "16/10",
-};
-
-const video: React.CSSProperties = {
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-};
-
-const scanBox: React.CSSProperties = {
-  position: "absolute",
-  inset: 0,
-  margin: "auto",
-  width: "65%",
-  height: "65%",
-  border: "2px solid rgba(255,255,255,0.9)",
-  borderRadius: 18,
-  boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)",
-};
 
 const statCard: React.CSSProperties = {
   border: "1px solid #23232b",
