@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function middleware(req: NextRequest) {
+// ✅ must be named "proxy" (or default export) in Next 16 proxy convention
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Protect /admin routes except /admin/login
