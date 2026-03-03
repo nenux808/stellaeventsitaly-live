@@ -241,7 +241,7 @@ export default async function Home() {
             </a>
           </div>
 
-          <div style={{ marginTop: 10, opacity: 0.85, fontSize: 13 }}>Presale €12 • At Gate €15</div>
+          <div style={{ marginTop: 10, opacity: 0.85, fontSize: 13 }}>Presale €12</div>
 
           {error ? (
             <div style={{ marginTop: 10, color: "#ff6b6b", fontSize: 13 }}>
