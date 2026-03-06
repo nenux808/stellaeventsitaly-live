@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 
+type ScannerProps = {
+  onToken: (token: string) => void;
+  onClose?: () => void;
+};
+
 function extractToken(input: string) {
   const text = (input || "").trim();
 
@@ -13,9 +18,7 @@ function extractToken(input: string) {
       const t = url.searchParams.get("token");
       if (t) return t.trim();
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   // Extract UUID if present anywhere
   const uuidMatch = text.match(
@@ -23,17 +26,10 @@ function extractToken(input: string) {
   );
   if (uuidMatch?.[0]) return uuidMatch[0].trim();
 
-  // fallback: return full text
   return text;
 }
 
-export default function Scanner({
-  onToken,
-  onClose,
-}: {
-  onToken: (token: string) => void;
-  onClose?: () => void;
-}) {
+export default function Scanner({ onToken, onClose }: ScannerProps) {
   const [err, setErr] = useState<string | null>(null);
   const [starting, setStarting] = useState(true);
 
@@ -107,7 +103,6 @@ export default function Scanner({
           const qr = qrRef.current;
           if (!qr) return;
 
-          // stop if scanning
           try {
             const state = (qr as any).getState?.();
             if (state === 2 || state === "SCANNING") {
@@ -136,9 +131,7 @@ export default function Scanner({
       />
 
       {starting ? (
-        <div style={{ marginTop: 10, opacity: 0.8, fontSize: 13 }}>
-          Opening camera…
-        </div>
+        <div style={{ marginTop: 10, opacity: 0.8, fontSize: 13 }}>Opening camera…</div>
       ) : null}
 
       {err ? (

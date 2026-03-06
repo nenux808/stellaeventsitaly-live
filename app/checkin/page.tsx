@@ -28,10 +28,8 @@ export default function CheckinPage() {
   const [loading, setLoading] = useState(false);
   const [res, setRes] = useState<CheckinResponse | null>(null);
 
-  // Scanner
   const [scannerOn, setScannerOn] = useState(false);
 
-  // analytics (optional)
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [eventId, setEventId] = useState("");
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -94,7 +92,6 @@ export default function CheckinPage() {
 
   return (
     <main style={wrap}>
-      {/* Main check-in card */}
       <div style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
           <div>
@@ -106,7 +103,6 @@ export default function CheckinPage() {
           </a>
         </div>
 
-        {/* PIN */}
         <div style={{ marginTop: 14 }}>
           <label style={label}>Gate PIN (if enabled)</label>
           <input
@@ -118,7 +114,6 @@ export default function CheckinPage() {
           />
         </div>
 
-        {/* Token */}
         <div style={{ marginTop: 14 }}>
           <label style={label}>Ticket Token</label>
           <input
@@ -131,7 +126,6 @@ export default function CheckinPage() {
           />
         </div>
 
-        {/* Actions */}
         <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
           <button onClick={() => doCheckin()} disabled={loading} style={btnPrimary} type="button">
             {loading ? "Checking..." : "Check In"}
@@ -153,7 +147,6 @@ export default function CheckinPage() {
           </button>
         </div>
 
-        {/* Scanner */}
         {scannerOn ? (
           <div style={{ marginTop: 14 }}>
             <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 8 }}>
@@ -172,39 +165,23 @@ export default function CheckinPage() {
             <button onClick={() => setScannerOn(false)} style={{ ...btnGhost, marginTop: 10 }} type="button">
               Close Scanner
             </button>
+
+            <div style={{ marginTop: 10, opacity: 0.7, fontSize: 12, lineHeight: 1.5 }}>
+              Tip: If camera doesn’t open, refresh the page and allow camera permission. Make sure you’re on HTTPS.
+            </div>
           </div>
         ) : null}
 
-        {/* Result */}
         {statusLabel ? (
-          <div
-            style={{
-              ...resultBox,
-              ...(statusLabel.type === "good" ? good : statusLabel.type === "warn" ? warn : bad),
-            }}
-          >
+          <div style={{ ...resultBox, ...(statusLabel.type === "good" ? good : statusLabel.type === "warn" ? warn : bad) }}>
             <div style={{ fontWeight: 950 }}>{statusLabel.text}</div>
 
             {res?.event?.title ? (
               <div style={{ marginTop: 8, opacity: 0.9 }}>
-                <div>
-                  <b>Event:</b> {res.event.title}
-                </div>
-                {res.ticketType?.name ? (
-                  <div>
-                    <b>Ticket:</b> {res.ticketType.name}
-                  </div>
-                ) : null}
-                {res.event?.venue ? (
-                  <div>
-                    <b>Venue:</b> {res.event.venue}
-                  </div>
-                ) : null}
-                {res.event?.start_at ? (
-                  <div>
-                    <b>Time:</b> {new Date(res.event.start_at).toLocaleString("en-GB")}
-                  </div>
-                ) : null}
+                <div><b>Event:</b> {res.event.title}</div>
+                {res.ticketType?.name ? <div><b>Ticket:</b> {res.ticketType.name}</div> : null}
+                {res.event?.venue ? <div><b>Venue:</b> {res.event.venue}</div> : null}
+                {res.event?.start_at ? <div><b>Time:</b> {new Date(res.event.start_at).toLocaleString("en-GB")}</div> : null}
                 {res.checked_in_at ? (
                   <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
                     <b>Checked in at:</b> {new Date(res.checked_in_at).toLocaleString("en-GB")}
@@ -216,7 +193,6 @@ export default function CheckinPage() {
         ) : null}
       </div>
 
-      {/* Analytics panel */}
       <div style={card}>
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>Live Analytics (Optional)</h2>
         <div style={{ marginTop: 10, opacity: 0.8, fontSize: 13 }}>
